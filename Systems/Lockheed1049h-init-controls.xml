@@ -128,4 +128,9 @@
     <fire-warning type="double">0</fire-warning>
   </special>
 
+  <gps155>
+    <brightness type="double">0.0</brightness>
+    <power type="bool">0</power>
+  </gps155>
+
 </PropertyList>

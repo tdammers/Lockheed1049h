@@ -28,6 +28,38 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
   <!-- =============================================================== -->
 
   <filter>
+    <name>Set NAV1 data-is-valid when slaved</name>
+    <type>gain</type>
+    <gain>1.0</gain>
+    <enable>
+      <condition>
+        <property>/instrumentation/nav[0]/slaved-to-gps</property>
+      </condition>
+    </enable>
+    <input>
+      <property>/instrumentation/gps155/powered</property>
+    </input>
+    <output>instrumentation/nav[0]/data-is-valid</output>
+  </filter>
+  <filter>
+    <name>Forward GPS bearing to NAV1 heading when slaved</name>
+    <type>gain</type>
+    <gain>1.0</gain>
+    <enable>
+      <condition>
+        <property>/instrumentation/nav[0]/slaved-to-gps</property>
+      </condition>
+    </enable>
+    <input>
+      <property>/instrumentation/gps/wp/wp[1]/bearing-mag-deg</property>
+      <offset>
+        <property>/environment/magnetic-variation-deg</property>
+        <scale>1.0</scale>
+      </offset>
+    </input>
+    <output>instrumentation/nav[0]/heading-deg</output>
+  </filter>
+  <filter>
     <name>RMI Needle 0</name>
     <type>gain</type>
     <gain>1.0</gain>

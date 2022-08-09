@@ -94,6 +94,7 @@
     <object-name>nav2</object-name>
     <object-name>adf1</object-name>
     <object-name>adf2</object-name>
+    <object-name>gps155</object-name>
   </animation>
 
   <!-- Captain Panel -->
@@ -121,6 +122,17 @@
       <y-m>0.091</y-m>
       <z-m>1.137</z-m>
       <roll-deg>0</roll-deg>
+    </offsets>
+  </model>
+
+  <model>
+    <name>gps155</name>
+    <path>Aircraft/Lockheed1049h/Models/Instruments/gps155.xml</path>
+    <offsets>
+      <x-m>-15.5</x-m>
+      <y-m>0</y-m>
+      <z-m>1.21</z-m>
+      <pitch-deg>0</pitch-deg>
     </offsets>
   </model>
 
@@ -436,6 +448,7 @@
   <animation>
     <type>select</type>
     <object-name>swplate_gpsslave</object-name>
+    <object-name>gps155</object-name>
     <condition>
       <property>/sim/model/options/show-gps</property>
     </condition>
@@ -1215,5 +1228,4 @@
       <pitch-deg>78</pitch-deg>
     </offsets>
   </model>
-
 </PropertyList>

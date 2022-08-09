@@ -41,6 +41,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
     <trim>
       <elevator-trim-turn type="double">0</elevator-trim-turn>
     </trim>
+    <route-manager>
+        <disable-fms type="bool">1</disable-fms>
+    </route-manager>
   </autopilot>
 
   <consumables>
@@ -130,6 +133,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
       <file>Nasal/mk-wiper.nas</file>
       <file>Aircraft/Generic/limits.nas</file>
     </Lockheed1049h>
+    <gps155>
+      <file>Nasal/gps155.nas</file>
+    </gps155>
   </nasal>
 
   <payload>
@@ -254,6 +260,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
       <path>fdm/jsbsim/inertia/pointmass-weight-lbs[18]</path>
       <path>fdm/jsbsim/inertia/pointmass-weight-lbs[19]</path>
       <path>sim/model/options</path>
+      <path>instrumentation/gps155/settings</path>
     </aircraft-data>
 
     <aircraft-version>3.0.6</aircraft-version>
