@@ -764,10 +764,6 @@ Low hardware config : 2 engines per sound; otherwise exception in main loop.
             <property>position/altitude-agl-ft</property>
             <value>50</value>
           </less-than>
-          <greater-than> <!-- only taxi -->
-            <property>velocities/airspeed-kt</property>
-            <value>20</value>
-          </greater-than>
           <or>
             <property>gear/gear[0]/wow</property>
             <property>gear/gear[1]/wow</property>
@@ -776,9 +772,16 @@ Low hardware config : 2 engines per sound; otherwise exception in main loop.
         </and>
       </condition>
       <volume>
-        <property>velocities/airspeed-kt</property>
-        <type>log</type>
-        <factor>0.5</factor>
+        <expression>
+            <table>
+                <property>velocities/groundspeed-kt</property>
+                <entry><ind>0</ind><dep>0</dep></entry>
+                <entry><ind>10</ind><dep>0.1</dep></entry>
+                <entry><ind>20</ind><dep>0.5</dep></entry>
+                <entry><ind>80</ind><dep>0.8</dep></entry>
+                <entry><ind>120</ind><dep>1.0</dep></entry>
+            </table>
+        </expression>
       </volume>
     </rumble>
 
