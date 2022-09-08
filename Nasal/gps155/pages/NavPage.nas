@@ -119,7 +119,6 @@ var NavPage = {
 
         redraw: func {
             var mode = getprop('/instrumentation/gps/mode') or 'obs';
-            var cte = getprop('/instrumentation/gps/cdi-deflection') or 0;
             var tgtID = getprop('/instrumentation/gps/wp/wp[1]/ID') or '';
             var fromID = getprop('/instrumentation/gps/wp/wp[0]/ID') or '';
             var fromFlag = getprop('/instrumentation/gps/from-flag') or 0;
@@ -145,17 +144,40 @@ var NavPage = {
             }
 
             if (tgtID != '' or mode == 'obs') {
-                var needlePos = 5 + math.min(5, math.max(-5, math.round(cte / 2)));
+                var needleDeflection = cte * 2;
+                    needlePosRaw = math.round(needleDeflection);
+                    needlePosFine = needleDeflection - needlePosRaw;
+                    needlePos = math.min(5, math.max(-5, needlePosRaw)) + 5;
+                    needlePosOffset = math.min(2, math.max(-2, math.round(needlePosFine * 6))) + 2;
+
                 cdiFormatted = '';
                 var i = 0;
                 for (i = 0; i < needlePos; i += 1)
-                    cdiFormatted ~= sc.dot;
+                    if (i == 5)
+                        cdiFormatted ~= '+';
+                    else
+                        cdiFormatted ~= sc.dot;
+                var tbl = [];
+
                 if (fromFlag)
-                    cdiFormatted ~= sc.arrowDn;
+                    tbl = [
+                        sc.cdiFromL2, sc.cdiFromL1,
+                        sc.cdiFromC,
+                        sc.cdiFromR1, sc.cdiFromR2,
+                    ];
                 else
-                    cdiFormatted ~= sc.arrowUp;
+                    tbl = [
+                        sc.cdiToL2, sc.cdiToL1,
+                        sc.cdiToC,
+                        sc.cdiToR1, sc.cdiToR2,
+                    ];
+
+                cdiFormatted ~= tbl[needlePosOffset];
                 for (i = needlePos + 1; i < 11; i += 1)
-                    cdiFormatted ~= sc.dot;
+                    if (i == 5)
+                        cdiFormatted ~= '+';
+                    else
+                        cdiFormatted ~= sc.dot;
                 if (mode != 'obs')
                     distanceFormatted = formatDistance(tgtDST);
                 if (mode == 'dto') {
@@ -295,7 +317,7 @@ var NavPage = {
                 visibleID = searchID;
             else
                 visibleID = refID;
-            
+
             if (lat and lon) {
                 formattedLat = formatLat(lat);
                 formattedLon = formatLon(lon);
