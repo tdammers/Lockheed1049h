@@ -13,10 +13,10 @@ var n = 0;
 for (var i = 0; i < 7; i += 1) {
     n = math.floor(rand() * 32) + 1;
     while (contains(satsUsed, n)) {
-        printf("%i already in list", n);
+        # printf("%i already in list", n);
         n = math.floor(rand() * 32) + 1;
     }
-    printf("new sat: %i", n);
+    # printf("new sat: %i", n);
     satsUsed[n] = 1;
     append(satellites, {
         ident: n,
@@ -89,7 +89,56 @@ var update = func (dt) {
     updateSequencing();
 };
 
+var sequence = func {
+    # printf("SEQUENCE");
+    var fp = flightplan();
+    if (!fp.active) {
+        # printf("No active flightplan");
+        return;
+    }
+
+    var mode = deviceProps.mode.getValue();
+    if (mode == 'dto') {
+        # direct-to is done, check if we should resume the following leg
+        var index = fp.indexOfWP(deviceProps.wp[1].latitude,
+                                            deviceProps.wp[1].longitude);
+        if (index >= 0) {
+            logprint(LOG_INFO, "GPS reached Direct-To, resuming FP leg at " ~ index);
+            # printf("GPS reached Direct-To, resuming FP leg at " ~ index);
+            fp.current = index + 1;
+            selectLEGMode();
+        } else {
+            # revert to OBS mode
+            logprint(LOG_INFO, "GPS reached Direct-To, resuming to OBS");
+            # printf("GPS reached Direct-To, resuming to OBS");
+            exitLEGMode('reached direct-to');
+        }
+    }
+    elsif (mode == 'leg') {
+        # standard leg sequencing
+        var nextIndex = fp.current + 1;
+        if (nextIndex >= fp.numWaypoints()) {
+            logprint(LOG_INFO, "GPS sequencing, finishing flightplan");
+            # printf("GPS sequencing, finishing flightplan");
+            fp.finish();
+            exitLEGMode('end of flight plan');
+        } elsif (fp.nextWP().wp_type == 'discontinuity') {
+            # printf("DISCONTINUITY");
+            exitLEGMode('DISCONTINUITY');
+        } else {
+            logprint(LOG_INFO, "GPS sequencing to next WP");
+            # printf("Next WP");
+            fp.current = nextIndex;
+        }
+    }
+    else {
+        # OBS, do nothing
+    }
+};
+
+
 var updateSequencing = func {
+    # printf("updateSequencing");
     var fp = flightplan();
 
     if (fp == nil) return;
@@ -99,6 +148,7 @@ var updateSequencing = func {
     var leg = nil;
     var nextLeg = nil;
 
+    # printf("mode: %s", mode);
     if (mode == 'obs') {
         # Nothing to do
         return;
@@ -109,17 +159,21 @@ var updateSequencing = func {
         var acpos = geo.aircraft_position();
         var targetCoord = geo.Coord.new();
         targetCoord.set_latlon(lat, lng);
-        var dist = acpos.distance_to(targetCoord);
+        # printf("target: %s %+02.5f %+03.5f", deviceProps.wp[1].name.getValue(), lat, lng);
+        var dist = acpos.distance_to(targetCoord) * M2NM;
+        # printf("dist: %0.1f", dist);
         if (dist < 0.25) {
             # direct-to is done, check if we should resume the following leg
             var index = fp.indexOfWP(lat, lng);
 
             if (index >= 0) {
+                # printf("Resume LEG at %i", index);
                 fp.current = index;
                 deviceProps.command.setValue('leg');
             }
             else {
                 var crs = deviceProps.desiredCourse.getValue();
+                # printf("Resume OBS at course %03.0f", crs);
                 deviceProps.selectedCourse.setValue(crs);
                 deviceProps.command.setValue('obs');
             }
@@ -127,7 +181,18 @@ var updateSequencing = func {
     }
     else {
         leg = fp.getWP(fp.current);
-        nextLeg = fp.getWP(fp.current + 1);
+        var i = fp.current + 1;
+        nextLeg = fp.getWP(i);
+        while (nextLeg != nil and
+               nextLeg.lat == leg.lat and
+               nextLeg.lon == leg.lon) {
+            i += 1;
+            nextLeg = fp.getWP(i);
+        }
+
+        # printf("leg: -> %5s, then %-5s",
+        #    (leg == nil) ? '-----' : leg.id,
+        #    (nextLeg == nil) ? '-----' : nextLeg.id);
 
         if (leg == nil) return;
         var acpos = geo.aircraft_position();
@@ -136,14 +201,17 @@ var updateSequencing = func {
         var track = deviceProps.groundspeed.getValue();
         var alt = deviceProps.altitude.getValue();
         var advance = 0;
+        # printf("Leg type: %s, %s", leg.wp_type, leg.fly_type);
+
         if (leg.wp_type == 'hdgToAlt') {
             if (alt >= leg.alt_cstr) {
-                fp.current += 1;
+                sequence();
             }
         }
         elsif (leg.fly_type == 'flyOver' or nextLeg == nil) {
+            # printf("dist: %0.2f", dist);
             if (dist < 0.25) {
-                fp.current += 1;
+                sequence();
             }
         }
         else {
@@ -151,8 +219,9 @@ var updateSequencing = func {
             var r = gs / 60 / math.pi;
             var thresholdDist = math.sin(courseDiff * D2R * 0.5) * r + 0.25;
             # debug.dump(leg.wp_name, gs, courseDiff, r, dist, thresholdDist);
+            # printf("dist: %0.2f / %0.2f", dist, thresholdDist);
             if (dist <= thresholdDist) {
-                fp.current += 1;
+                sequence();
             }
         }
     }
@@ -384,102 +453,58 @@ var selectLEGMode = func { deviceProps.command.setValue('leg'); };
 var exitLEGMode = func (reason='other reason') {
     if (deviceProps.command.getValue() == 'leg') {
         logprint(LOG_INFO, 'switch GPS to OBS mode due to ' ~ reason);
-        me._captureCurrentCourse();
-        me._selectOBSMode();
+        captureCurrentCourse();
+        selectOBSMode();
     }
 };
 
-var FPDelegate = {
-    new: func (fp) {
-        logprint(LOG_INFO, 'creating GPS155TSO flightplan delegate');
-        # make FlightPlan behaviour match GPS config state
-        fp.followLegTrackToFix = getprop('/instrumentation/gps/config/follow-leg-track-to-fix') or 0;
-
-        # similarly, make FlightPlan follow the performance category settings
-        fp.aircraftCategory = getprop('/autopilot/settings/icao-aircraft-category') or 'A';
-        return {
-            parents: [FPDelegate],
-            flightplan: fp,
-        };
-    },
-
-
-    waypointsChanged: func
-    {
-    },
-
-    activated: func
-    {
-        if (!me.flightplan.active)
-            return;
-
-        logprint(LOG_INFO,'flightplan activated, default GPS to LEG mode');
-        selectLEGMode();
-
-        # if (getprop(GPSPath ~ '/wp/wp[1]/from-flag')) {
-        #     logprint(LOG_INFO, '\tat GPS activation, already passed active WP, sequencing');
-        #     me.sequence();
-        # }
-    },
-
-    deactivated: func
-    {
-        exitLEGMode('flightplan deactivated');
-    },
-
-    endOfFlightPlan: func
-    {
-        exitLEGMode('end of flightplan');
-    },
-
-    cleared: func
-    {
-        if (!me.flightplan.active)
-            return;
-        exitLEGMode('flightplan cleared');
-    },
-
-    sequence: func
-    {
-        if (!me.flightplan.active)
-            return;
-
-        var mode = deviceProps.command.getValue();
-        if (mode == 'dto') {
-            # direct-to is done, check if we should resume the following leg
-            var index = me.flightplan.indexOfWP(deviceProps.wp[1].latitude,
-                                                deviceProps.wp[1].longitude);
-            if (index >= 0) {
-                logprint(LOG_INFO, "default GPS reached Direct-To, resuming FP leg at " ~ index);
-                me.flightplan.current = index + 1;
-                selectLEGMode();
-            } else {
-                # revert to OBS mode
-                logprint(LOG_INFO, "default GPS reached Direct-To, resuming to OBS");
-
-                captureCurrentCourse();
-                selectOBSMode();
-            }
+var loadCycleInfo = func (filename) {
+    var str = io.readfile(filename);
+    var lines = split("\n", str);
+    var dict = {};
+    foreach (var line; lines) {
+        var kv = split(":", string.trim(line));
+        if (size(kv) >= 2) {
+            var k = string.trim(kv[0]);
+            var v = string.trim(string.join(':', subvec(kv, 1)));
+            dict[k] = v;
         }
-        elsif (mode == 'leg') {
-            # standard leg sequencing
-            var nextIndex = me.flightplan.current + 1;
-            if (nextIndex >= me.flightplan.numWaypoints()) {
-                logprint(LOG_INFO, "default GPS sequencing, finishing flightplan");
-                me.flightplan.finish();
-            } elsif (me.flightplan.nextWP().wp_type == 'discontinuity') {
-                exitLEGMode('DISCONTINUITY');
-            } else {
-                logprint(LOG_INFO, "default GPS sequencing to next WP");
-                me.flightplan.current = nextIndex;
-            }
-        }
-        else {
-            # OBS, do nothing
-        }
-    },
+    }
+    var airac = dict['AIRAC cycle'];
+    var validityRaw = split('-', dict['Valid (from/to)'] or '');
+    var validFrom = split('/', string.trim(validityRaw[0]));
+    var validTo = split('/', string.trim(validityRaw[1]));
+    var name = 'WORLD IFR';
+    if (dict['Forum'] == 'http://forum.navigraph.com')
+        name = 'NAVIGRAPH WORLD IFR';
+    return {
+        name: name,
+        eff: formatAiracDate(validFrom),
+        exp: formatAiracDate(validTo),
+        airac: airac,
+    };
+};
 
-    currentWaypointChanged: func { },
+var formatAiracDate = func (dmy) {
+    return dmy[0] ~ '-' ~ string.lc(dmy[1]) ~ '-' ~ substr(dmy[2], -2);
+};
+
+var defaultCycleInfo = {
+    name: 'FG WORLD IFR',
+    airac: '1310',
+    eff: ['19-sep-2013'],
+    exp: ['16-oct-2013'],
+};
+
+var loadNavDBInfo = func {
+    var sceneryDirNodes = props.globals.getNode('sim').getChildren('fg-scenery');
+    foreach (var sceneryDirNode; sceneryDirNodes) {
+        var filename = sceneryDirNode.getValue() ~ '/NavData/cycle_info.txt';
+        if (io.stat(filename) != nil) {
+            return loadCycleInfo(filename);
+        }
+    }
+    return defaultCycleInfo;
 };
 
 var initDevice = func {
@@ -487,9 +512,6 @@ var initDevice = func {
     if (updateTimer != nil) {
         updateTimer.stop();
     }
-    unregisterFlightPlanDelegate('GPS155TSO');
-    registerFlightPlanDelegate(FPDelegate.new, 'GPS155TSO');
-
     updateTimer = maketimer(0.5, func { update(0.5); });
     updateTimer.simulatedTime = 1;
 
@@ -510,6 +532,8 @@ var initDevice = func {
     deviceProps['referenceLat'].setValue(0);
     deviceProps['referenceLon'] = props.globals.getNode('instrumentation/gps155/reference/longitude-deg', 1);
     deviceProps['referenceLon'].setValue(0);
+    deviceProps['navdb'] = props.globals.getNode('instrumentation/gps155/navdb', 1);
+    deviceProps['navdb'].setValues(loadNavDBInfo());
     deviceProps['powered'] = props.globals.getNode('instrumentation/gps155/powered', 1);
     setPropDefault(deviceProps.powered, 0);
     deviceProps['initializationTimer'] = props.globals.getNode('instrumentation/gps155/initializationTimer', 1);
@@ -542,6 +566,10 @@ var initDevice = func {
                 trk: props.globals.getNode('instrumentation/gps155/settings/fields/cdi/trk', 1),
                 ete: props.globals.getNode('instrumentation/gps155/settings/fields/cdi/ete', 1),
             },
+            route: {
+                distanceMode: props.globals.getNode('instrumentation/gps155/settings/fields/route/distance-mode', 1),
+                legExtraMode: props.globals.getNode('instrumentation/gps155/settings/fields/route/leg-extra-mode', 1),
+            },
         },
         startupSpeed: props.globals.getNode('instrumentation/gps155/settings/startup-speed', 1),
     };
@@ -556,6 +584,8 @@ var initDevice = func {
     setPropDefault(deviceProps.settings.units.pressure, 'hpa');
     setPropDefault(deviceProps.settings.units.temperature, 'degC');
     setPropDefault(deviceProps.settings.startupSpeed, 'realistic');
+    setPropDefault(deviceProps.settings.fields.route.distanceMode, 'leg');
+    setPropDefault(deviceProps.settings.fields.route.legExtraMode, 'dtk');
 
     deviceProps['currentPage'] = {
         nav: props.globals.getNode('instrumentation/gps155/currentPage/nav', 1),
@@ -588,6 +618,7 @@ var initDevice = func {
             latitude: props.globals.getNode('instrumentation/gps/wp/wp[1]/latitude-deg'),
             longitude: props.globals.getNode('instrumentation/gps/wp/wp[1]/longitude-deg'),
             name: props.globals.getNode('instrumentation/gps/wp/wp[1]/name'),
+            distance: props.globals.getNode('instrumentation/gps/wp/wp[1]/distance-nm'),
         },
     ];
 

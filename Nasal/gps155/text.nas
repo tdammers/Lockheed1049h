@@ -472,23 +472,23 @@ var formatDistance = func (dist, inUnit='nm') {
     var symbol = units[outUnit].symbol;
 
     if (displayValue > 99999) {
-        return '+++++ ';
+        return '+++++';
     }
     elsif (displayValue < 0) {
-        return '----- ';
+        return '-----';
     }
     elsif (displayValue < 100) {
         var i = math.floor(displayValue);
         var f = math.floor((displayValue - i) * 100);
-        return sprintf('%3i', i) ~ smallStr(sprintf('.%02i', f)) ~ symbol;
+        return sprintf('%2i', i) ~ smallStr(sprintf('.%02i', f)) ~ symbol;
     }
     elsif (displayValue < 1000) {
         var i = math.floor(displayValue);
         var f = math.floor((displayValue - i) * 10);
-        return sprintf('%4i', i) ~ smallStr(sprintf('.%01i', f)) ~ symbol;
+        return sprintf('%3i', i) ~ smallStr(sprintf('.%01i', f)) ~ symbol;
     }
     else {
-        return sprintf('%5i', displayValue) ~ symbol;
+        return sprintf('%4i', displayValue) ~ symbol;
     }
 };
 
@@ -548,6 +548,20 @@ var shorten = func (str, maxlen) {
     return utf8.substr(str, 0, half) ~
            '..' ~
            utf8.substr(str, utf8.size(str) - (maxlen - 2 - half));
+};
+
+var longSpace = '                                                             ';
+
+var alignCenter = func (str, maxlen) {
+    var l = utf8.size(str);
+    if (l > maxlen) {
+        return shorten(str, maxlen);
+    }
+    else {
+        var left = math.floor((maxlen - l) / 2);
+        var right = maxlen - l - left;
+        return substr(longSpace, 0, left) ~ str ~ substr(longSpace, 0, right);
+    }
 };
 
 var navid5 = func (str) {
